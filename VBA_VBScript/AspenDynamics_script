@@ -1,0 +1,93 @@
+''''''''''' error handler ''''''''''''''
+on error resume next
+
+''''''''''' output messages ''''''''''''''
+' log messages
+Application.Simulation.OutputLogger.Path = curDir & "\log.txt"
+If Application.Simulation.OutputLogger.FileOutput = False Then
+  Application.Simulation.OutputLogger.FileOutput = True
+End If
+
+''''''''''' read and write files in the same folder '''''''''''
+Const ForReading = 1, ForWriting = 2, ForAppending = 8
+Dim fullname, filename, curDir
+fullname = activedocument.fullname
+filename = activedocument.name
+curDir = Trim(Replace(fullname, filename, ""))
+
+Dim fso, f, line
+Set fso = CreateObject("Scripting.FileSystemObject")
+Set f = fso.OpenTextFile(curDir & "\input.csv", ForReading)
+line = f.ReadLine
+fA = CDBl((Split(line, ",")(5)))
+f.Close
+
+Set f = fso.OpenTextFile(curDir & "\temp.txt", ForWriting, True)
+f.WriteLine Cstr(GIcons_new) & vbNewLine & Cstr(GLYprod_new)
+f.Close
+
+Dim dataLine
+dataLine = dataLine & Cstr(idx) & ","                              ' index
+dataLine = dataLine & Cstr(Application.Simulation.Time) & ","      ' sim time in min
+dataLine = dataLine & Cstr(R1_All_Sites.CHGPttotal.Value) & ","    ' catalyst mass size
+dataLine = dataLine & Cstr(Now()) & ","
+Set f = fso.OpenTextFile(curDir & "\output.csv", ForAppending, True)
+f.WriteLine Cstr(dataLine)
+f.Close
+
+Dim fso, f, header
+Set fso = CreateObject("Scripting.FileSystemObject")
+Set f = fso.OpenTextFile(curDir & "\output.csv", ForWriting, True)
+header = "Index" & "," _
+  & "Sim time (min)" &"," _
+  & "Catalyst Mass size (lb)" &"," _
+f.WriteLine Cstr(header)
+f.Close
+
+Do Until f.AtEndOfStream
+  line = f.ReadLine
+  '''
+Loop
+
+''''''''''' settings ''''''''''''''''    
+Application.Visible = True
+Application.Simulation.Options.TimeSettings.EnableStepFor = False
+Application.Simulation.Options.TimeSettings.EnablePauseAt = True
+Application.Simulation.Options.TimeSettings.PauseAt = 30
+
+Application.Simulation.RunMode = "Initialization"
+Application.Simulation.RunMode = "Dynamic"
+GLYTOT.Value = 0
+Application.Simulation.Flowsheet.GEndpoint.Value = GEndpoint
+Application.Simulation.Run (True)
+
+''''''''''' load snapshot '''''''''''
+Application.Simulation.Results.Refresh
+
+Dim iCount
+Dim aSnapshot 
+Dim snapshotToLoad 
+
+snapshotToLoad = "v15a"
+' search the name of the target snapshot among saved results
+For iCount = 0 To Application.Simulation.Results.ResultCount - 1
+    Set aSnapshot = Application.Simulation.Results.GetResult(iCount)
+    If (aSnapshot.Description = snapshotToLoad) Then
+        Application.Simulation.Results.CopyValues aSnapshot
+    End If
+Next 
+' search the name of the target snapshot among saved snapshots
+For iCount = 0 To Application.Simulation.Results.SnapshotCount - 1
+    Set aSnapshot = Application.Simulation.Results.GetSnapshot(iCount)
+    If (aSnapshot.Description = snapshotToLoad) Then
+        Application.Simulation.Results.CopyValues aSnapshot
+    End If
+Next 
+
+''''''''''' Activate tasks '''''''''''
+Invoke ("task_reset")
+
+''''''''''' IF loop ''''''''''''''''
+if Catalyst_Add10.Active then
+  Catalyst_Add10.Active = False
+end if
