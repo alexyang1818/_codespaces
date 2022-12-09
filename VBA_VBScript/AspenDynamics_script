@@ -91,3 +91,32 @@ Invoke ("task_reset")
 if Catalyst_Add10.Active then
   Catalyst_Add10.Active = False
 end if
+
+''''''''''''''' Callable script ''''''''''''''''
+'''' 1. passing on arguments
+' create a callable script named "CallableScript"
+application.msg " Input count = " & Inputs.count
+for each arg in inputs
+	application.msg " " & arg
+next
+
+' call the above script
+call CallableScript("arg1", 10.5)
+
+' expected printout on APD simulation messages:
+Input count = 2
+	arg1
+	10.5
+	
+'''' 2. collect results
+' callable script named "SumInputs"
+outputs.count = 1
+outputs(1) = 0
+
+for each arg in Inputs
+	outputs(1) = outputs(1) + arg
+next
+
+' call the above script
+set results = SumInputs(1,2,3,5)
+application msg "Sum of inputs = " & results(1)
