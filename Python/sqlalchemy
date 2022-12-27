@@ -1,0 +1,177 @@
+# Load DataFrame to SQL using sqlalchemy
+def load_to_database(db_file, tag, actual_name, START_TIME, STOP_TIME, date_of_data):
+        
+    #------------ dependencies -------------#    
+    import pandas as pd
+    import sqlite3
+    from sqlalchemy import create_engine, inspect
+    
+    #--------- create database file if not exists ---------#    
+    if not os.path.exists(db_file): 
+        """ create a database connection to a SQLite database """
+        conn = None
+        try:
+            conn = sqlite3.connect(db_file)
+            print('Database is created.')
+        except Error as e:
+            print(e)
+        finally:
+            if conn:
+                conn.close()
+
+    #---------- add new tag to "tags_list" --------------#    
+    engine = create_engine(f"sqlite:///{db_file}", echo = False)    
+    engine.execute(f'CREATE TABLE IF NOT EXISTS "tags_list" ( '
+                   'tag VARCHAR NOT NULL,'
+                   'actual_name VARCHAR, '
+                   'imported_dates VARCHAR); ')
+    tag_count = engine.execute(f'SELECT COUNT(*) FROM tags_list WHERE tag = "{tag}"')
+    if not [_c for _c in tag_count][0][0] > 0: ## parse engine.execute results
+        engine.execute(f'INSERT INTO "tags_list" '
+                       f'(tag, actual_name, imported_dates) '
+                       f'VALUES ("{tag}", "{actual_name}", "|") '  )
+        
+    #----------- fetch only the missing data -----------#  
+    imported_dates = engine.execute(f'SELECT imported_dates FROM tags_list WHERE tag = "{tag}"')
+    imported_dates = [_c for _c in imported_dates][0][0]
+    if date_of_data in imported_dates:
+        return
+
+    #----------- fetch raw data from ip21 -----------#    
+    df = fetch_ip21(tag, actual_name, START_TIME, STOP_TIME)
+    try:    
+        if not df: ## return error message if df is returned empty
+            print(f'Importing {tag} unsuccessful.')
+            return
+    except:
+        pass
+
+    #---------- add new datapoints ----------#
+    df.to_sql(tag, engine, if_exists='append', chunksize=900, index=False)
+
+    #---------- log the date --------------#    
+    imported_dates = imported_dates + date_of_data + '|'
+    engine.execute(
+        f'UPDATE tags_list '
+        f'SET imported_dates = "{imported_dates}" '
+        f'WHERE tag = "{tag}"')
+    
+    engine.dispose()
+    
+    return
+	
+# View table of SQL database as DataFrame
+def view_database_table(db_file, table):
+    #---------- dependencies ----------#
+    import pandas as pd
+    from sqlalchemy import create_engine
+
+    #---------- Make a connection to the SQLite database ------------#
+    engine = create_engine(f"sqlite:///{db_file}", echo=False)
+    conn = engine.connect()
+
+    # Query All Records in the the Database
+    df = pd.read_sql(f"SELECT * FROM \"{table}\"", conn)
+    if 'timestamp' in df.columns: ## convert the "timestamp" column to datetime type
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+    #----------- close connections ------------#
+    conn.close()
+    engine.dispose()
+
+    return df
+	
+# Remove duplicate records from SQL databases
+import os
+from sqlalchemy import create_engine
+
+def remove_duplicates(db_file, table):
+    engine = create_engine(f"sqlite:///{db_file}", echo = False)
+
+    t0 = datetime.datetime.now()
+    
+	## create a "helper_table" to temporily store the table being processed.
+	
+    engine.execute(
+        f'DROP TABLE IF EXISTS helper_table; '
+                  )
+    engine.execute(
+        f'CREATE TABLE IF NOT EXISTS helper_table AS '
+        f'SELECT * '
+        f'FROM \"{table}\" '
+                  )
+
+    engine.execute(
+        f'DROP TABLE IF EXISTS \"{table}\"; '
+                  )
+    engine.execute(
+        f'CREATE TABLE IF NOT EXISTS \"{table}\" AS '
+        f'SELECT DISTINCT * '
+        f'FROM helper_table '
+                  )
+    engine.execute(
+        f'DROP TABLE IF EXISTS helper_table; '
+                  )
+
+    engine.dispose()
+
+    t1 = datetime.datetime.now()
+    dt = int((t1 - t0).total_seconds())
+    print(f'{dt} seconds')
+    
+    return
+	
+# resample time series data with given intervals
+def feature_1_min_int(tag, src_db, dst_db):
+    df = view_database_table(src_db, tag)
+    if 'timestamp' not in df.columns: ## only time series datasets contain column "timestamp"
+        return
+    actual_name = df.columns[-1]
+    df.drop_duplicates('timestamp', inplace=True)
+    df.sort_values(by='timestamp', ignore_index=True, inplace=True)    
+    df.set_index('timestamp', inplace=True)
+
+    try:
+        resampled_df = df.resample('1T', label='left').ffill().dropna()
+        print(f'{tag} SUCCESSFUL')
+    except:
+        print(f'{tag} ERROR')
+        return
+    engine = create_engine(f"sqlite:///{dst_db}", echo = False)  
+    resampled_df.to_sql(tag, engine, if_exists='replace', chunksize=900, index=True)
+    engine.dispose()
+    
+    return
+	
+# working progress: connect to Azure SQL databases
+import urllib
+from sqlalchemy import create_engine
+
+# Driver={ODBC Driver 13 for SQL Server};
+# Server=tcp:aimi-na.database.windows.net,1433;
+# Database=zar_tech_raw;
+# Uid=aimi-na-db;
+# Pwd={your_password_here};
+# Encrypt=yes;
+# TrustServerCertificate=no;
+# Connection Timeout=30;
+
+
+server = "aimi-na.database.windows.net"
+database = "zar_tech_raw"
+username = "aimi-na-db"
+password = "*****"
+driver = '{ODBC Driver 13 for SQL Server}'
+
+odbc_str = 'DRIVER=' + driver + ';server=' + server+';PORT=1433;UID='+username+';DATABASE='+database+';PWD='+password
+connect_str = 'mssql+pyodbc:///?odbc_connect=' + urllib.parse.quote_plus(odbc_str)
+
+print(connect_str)
+
+engine = create_engine(connect_str)
+print(engine.execute("SELECT 1").fetchall())
+	
+	
+	
+	
+	
