@@ -1,0 +1,9 @@
+<!DOCTYPE html>
+<html lang="en">
+    <p>Not sure how you were calling <code>concat()</code> but it should work as long as both objects are of the same type. Maybe the issue is that you need to cast your second vector to a dataframe? Using the df that you defined the following works for me:</p>
+    <pre class="lang-py s-code-block"  style="margin-left: 40px; background-color:lightgray">
+        <code class="hljs language-python">
+    df2 = pd.DataFrame([[2, 3, 4]], columns=['A', 'B', 'C'])
+    pd.concat([df2, df])</code>
+    </pre>
+</html>

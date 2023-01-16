@@ -171,7 +171,4 @@ print(connect_str)
 engine = create_engine(connect_str)
 print(engine.execute("SELECT 1").fetchall())
 	
-	
-	
-	
-	
+
